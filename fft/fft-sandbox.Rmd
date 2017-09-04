@@ -1,0 +1,135 @@
+---
+title: "FFT Sandbox"
+author: "Ryszard Czerminski"
+date: "September 2, 2017"
+header-includes:
+   - \usepackage{amsmath}
+   - \usepackage{mathtools}
+   - \DeclareMathOperator*{\E}{\mathbb{E}}
+   - \usepackage{hyperref}
+   - \hypersetup{
+      colorlinks=true,
+      linkcolor=blue,
+      filecolor=magenta,
+      urlcolor=cyan,
+    }
+
+output:
+    pdf_document
+---
+
+\section{Intro}
+
+The goal of this document is to provide (very) brief introduction to FFT in R
+
+\section{FFT basics}
+
+Fourier Transform for one dimensional function of time ($f(t)$) is defined as:
+$$
+    \hat f(\nu) = \int_{-\infty}^{+\infty} f(t) e^{-2\pi i \nu t} dt
+$$
+Note that for real valued function \href{https://en.wikipedia.org/wiki/Fast_Fourier_transform#FFT_algorithms_specialized_for_real_and.2For_symmetric_data}{the power spectrum is symmetric} 
+
+\section {Function definitions}
+```{r echo=TRUE}
+gen.signal <- function(
+                   amplitude, # amplitudes
+                   period,    # periods
+                   phase,     # phases
+                   time,      # sampling times
+                   shift=0,   # constant added to the periodic sinusoidal signal
+                   noise=0,   # how much noise to add
+                   verbose=0) {
+  n <- unique(c(length(amplitude), length(period), length(phase)))
+  if (length(n) != 1) stop('amplitude, periods, and phase lengths must be equal')
+  y <- rep(shift, length(t))
+  for (i in 1:n) y <- y + amplitude[i] * sin(phase[i] + 2*pi*time/period[i])
+  if (noise > 0) y <- y + noise * rnorm(length(y), sd=sd(y))
+  return (y)
+}
+get.fft <- function(y,             # signal
+                    t,             # sampling times
+                    mean.rm=FALSE) # keep/remove mean of the signal
+{
+  dt <- t[2] - t[1]
+  df <- 1/(max(t) - min(t))
+  fnyq <- 1/(2*dt)           # Nyquist frequency
+  f <- seq(0, 2*fnyq, by=df) # frequencies for FFT output (in Hz)
+  if (mean.rm) y <- y - mean(y)
+  ft <- 2 * fft(y)/length(y) # normalized fourier transform
+  pw <- abs(ft) # power spectrum
+  return (list(f=f, ft=ft, pw=pw))
+}
+plt.power <- function(y,        # signal
+                      t,        # sampling times
+                      pw,       # power spectrum
+                      f,        # frequencies
+                      show='',  # what to display
+                      eps=1e-6, # small number to ignore floating-point errors
+                      ext=1.1)  # how much to extend the plot beyond the last maximum
+  {
+    n <- unique(c(length(y), length(t), length(f), length(pw)))
+    if (length(n) != 1) stop('y,t,pw,f lengths should be equal')
+    if (show == 'all') {
+      mx <- n
+    } else if (show == 'half') {
+      mx <- n/2
+    } else {
+      z <- diff(pw[1:(n/2)], differences=2)
+      w <- which(z < -eps)
+      mx <- min(max(w) * ext, n/2) # index for the highest frequency maximum
+    }
+    idx <- 1:mx
+    par(mfrow=c(1,2))
+    plot(t, y, type='l', xlab='time [s]', ylab='signal value', main='original signal')
+    plot(f[idx], pw[idx], type='l', xlab='freq [Hz]', ylab='power', main='FFT output')
+    par(mfrow=c(1,1))
+}
+```
+```{r fig.height=4, fig.width=8}
+amplitudes <- c(1, 1/2, 1/4, 1/8)
+periods <- c(1, 1/2, 1/4, 1/8)
+phases <- runif(4, 0, 2*pi)
+dt <- 1/64
+nsamples <- 4 * (1/dt)
+t <- (0:(nsamples-1)) * dt
+y <- gen.signal(amplitudes, periods, phases, t, shift=0, verbose=1)
+v <- get.fft(y, t)
+plt.power(y, t, v$pw, v$f)
+```
+
+
+```{r fig.height=4, fig.width=8}
+y <- gen.signal(amplitudes, periods, phases, t, shift=1, noise=0.1, verbose=1)
+v <- get.fft(y, t, mean.rm=FALSE)
+plt.power(y, t, v$pw, v$f)
+```
+and that power component at $\nu = 0$ can be removed simply by subtracting the mean from the signal.
+```{r fig.height=4, fig.width=8}
+y <- gen.signal(amplitudes, periods, phases, t, shift=1, verbose=1)
+v <- get.fft(y, t, mean.rm=TRUE)
+plt.power(y, t, v$pw, v$f)
+```
+\section{Some points to note}
+\begin{enumerate}
+\item phases do not have influence on the power spectrum - note that when you repeat \emph{knit}
+      process phases are generated randomly and the signal looks different each time,
+      but the power spectrum does not change.
+      Phases influence however (complex) Fourier Transform values.
+\item power spectrum value at $\nu = 0$ reflects mean value of the signal.
+\item sharpness (resolution) of the spectrum is determined by the length of the signal -
+      experiment with \texttt{nsamples} to see this.
+\item you may also want to play with \texttt{noise} parameter to see how adding random signal
+      corrupts the power spectrum
+\item FFT is fastest if the number of points in the signal to analyze is equal to power of two,
+      e.g. $2^9 = 512$, $2^{10} = 1024$, etc.; see help(fft)
+
+\end{enumerate}
+
+\section{References}
+\begin{enumerate}
+\item \href{https://en.wikipedia.org/wiki/Fourier_transform}{Fourier transform}
+\item \href{https://en.wikipedia.org/wiki/Discrete_Fourier_transform}{Discrete Fourier transform}
+\item \href{https://en.wikipedia.org/wiki/Fast_Fourier_transform}{FFT}
+\item \href{https://en.wikipedia.org/wiki/Nyquist_frequency}{Nyquist frequency}
+\end{enumerate}
