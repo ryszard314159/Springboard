@@ -1,0 +1,60 @@
+---
+title: "FFT Sandbox"
+author: "Ryszard Czerminski"
+date: "September 2, 2017"
+header-includes:
+   - \usepackage{amsmath}
+   - \usepackage{mathtools}
+   - \DeclareMathOperator*{\E}{\mathbb{E}}
+   - \usepackage{hyperref}
+   - \hypersetup{
+      colorlinks=true,
+      linkcolor=blue,
+      filecolor=magenta,
+      urlcolor=cyan,
+    }
+
+output:
+    pdf_document
+---
+
+\section{Intro}
+
+```{r}
+getwd()
+```
+```{r}
+x <- Sys.getenv('SPRINGBOARD_LIBDIR')
+fn <- paste(Sys.getenv('SPRINGBOARD_LIBDIR'), 'sigUtils.R', sep='/')
+source(fn)
+data.sets <- c('dry', 'wash')
+v <- prep.signals(data.sets, verbose=1)
+if (length(v$err) > 0) {
+  for (x in v$err) cat(x, '\n')
+  stop()
+} else {
+  signals <- v$data
+}
+
+```
+```{r}
+plt.signals(signals)
+```
+
+\section{Signal amplitude analysis}
+
+```{r}
+plt.cdfs(signals, xlab='amplitude', value='norm', titl='signals')
+```
+
+\section{Frequency analysis}
+```{r}
+power <- list()
+for (name in names(signals)) {
+  y <- signals[[name]]$norm; t <- signals[[name]]$t
+  v <- get.fft(y, t, mean.rm=TRUE)
+  plt.power(y, t, v$pw, v$f, tag=name)
+  power[[name]] <- list(f=v$f, pw=v$pw)
+}
+plt.cdfs(power, xlab='freq', value='pw', titl='power')
+```
