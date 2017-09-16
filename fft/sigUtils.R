@@ -1,11 +1,11 @@
-prep.signals <- function(data.sets, threshold=0.01, verbose=0) {
+prep.signals <- function(data.sets, threshold=0.01, dir='./', verbose=0) {
   # massage original data and QA
   z <- "time..sec.,X.vibration..m.s.2.,Y.vibration..m.s.2.,Z.vibration..m.s.2.,Start.Time,Start.Date,Duration..sec.,Data.Rate..Hz."
   expected <- strsplit(z, ',')[[1]]
   lst <- list()
   err <- list()
   for (dn in data.sets) {
-    fn <- paste(dn, '.csv', sep='')
+    fn <- paste(dir, sprintf('%s.csv', dn), sep='/')
     if (verbose > 0) {
        cat('INFO: prep.signals: dn=', dn, 'fn=', fn, '\n')
     }
@@ -59,7 +59,9 @@ plt.cdfs <- function(signals, xlab='amplitude', value='norm', titl='signals') {
 
 get.fft <- function(y,             # signal
                     t,             # sampling times
-                    mean.rm=FALSE) # keep/remove mean of the signal
+                    tag=NULL,
+                    return.half=TRUE,
+                    mean.rm=TRUE) # keep/remove mean of the signal
 {
   dt <- t[2] - t[1]
   df <- 1/(max(t) - min(t))
@@ -71,10 +73,16 @@ get.fft <- function(y,             # signal
     mx <- max(f)
     f[length(f) + 1] <- mx + df
   }
-  cat(sprintf('get.fft: dt=%s, fnyq=%s, max(f)=%s', signif(dt,2), signif(fnyq,3), signif(max(f))))
+  cat(sprintf('get.fft: %s: dt=%s, fnyq=%s, max(f)=%s\n', tag,
+      signif(dt,2), signif(fnyq,3), signif(max(f))))
   if (mean.rm) y <- y - mean(y)
   ft <- 2 * fft(y)/length(y) # normalized fourier transform
   pw <- abs(ft) # power spectrum
+  if (return.half) {
+     i <- 1:as.integer(length(f)/2)
+     f <- f[i]
+     pw <- pw[i]
+  }
   return (list(f=f, ft=ft, pw=pw))
 }
 
@@ -87,16 +95,20 @@ plt.power <- function(y,        # signal
                       eps=1e-6, # small number to ignore floating-point errors
                       ext=1.1)  # how much to extend the plot beyond the last maximum
   {
-    n <- unique(c(length(y), length(t), length(f), length(pw)))
-    if (length(n) != 1) stop('y,t,pw,f lengths should be equal')
+    nt <- unique(c(length(y), length(t)))
+    nf <- unique(c(length(f), length(pw)))
+    if (length(nt) != 1 | length(nf) != 1) {
+       cat('plt.power: length(y), length(t)=', length(y), length(t), '\n')
+       cat('plt.power: length(pw), length(f)=', length(pw), length(f), '\n')
+       msg <- sprintf('%s: y,t and pw,f lengths should be respectively equal', tag)
+       stop(msg)
+    }
     if (show == 'all') {
-      mx <- n
-    } else if (show == 'half') {
-      mx <- n/2
+      mx <- nf
     } else {
-      z <- diff(pw[1:(n/2)], differences=2)
+      z <- diff(pw, differences=2)
       w <- which(z < -eps)
-      mx <- min(max(w) * ext, n/2) # index for the highest frequency maximum
+      mx <- min(max(w) * ext, nf) # index for the highest frequency maximum
     }
     idx <- 1:mx
     par(mfrow=c(1,2))

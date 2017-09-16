@@ -20,41 +20,93 @@ output:
 
 \section{Intro}
 
+\section{Setup global contants for vibration analysis}
 ```{r}
-getwd()
+cat('cwd:', getwd(), '\n')
+dir <- list()
+dir$libs <- Sys.getenv('SPRINGBOARD_LIBS')
+dir$data <- Sys.getenv('SPRINGBOARD_DATA')
+fn.libs <- paste(dir$libs, 'sigUtils.R', sep='/')
+probs <- seq(0.1, 0.9, 0.1)
+probs <- seq(0.25, 0.75, 0.5)
+cat('SPRINGBOARD_LIBS:', dir$libs, '\n')
+cat('SPRINGBOARD_DATA:', dir$data, '\n')
+cat('fn.libs:', fn.libs, '\n')
 ```
+
+\section{Production line sample}
+
 ```{r}
-x <- Sys.getenv('SPRINGBOARD_LIBDIR')
-fn <- paste(Sys.getenv('SPRINGBOARD_LIBDIR'), 'sigUtils.R', sep='/')
-source(fn)
+fn <- paste(dir$data, 'sample.csv', sep='/')
+x <- read.csv(fn)
+fmt <- '%m/%d/%Y %I:%M %p'
+x$Start <- as.POSIXct(x$Start.Time, format=fmt)
+x$End <- as.POSIXct(x$End.Time, format=fmt)
+x$Start.Time <- x$End.Time <- NULL
+x$Span <- x$End - x$Start
+```
+Note, that \texttt{Duration} (from csv) and \texttt{Span} (calculated as diff beteen \texttt{Start}
+and \texttt{End} are not the same:
+```{r}
+head(x[, c('Duration', 'Span')])
+head(x)
+```
+
+```{r}
+source(fn.libs)
 data.sets <- c('dry', 'wash')
-v <- prep.signals(data.sets, verbose=1)
+cols <- c('red', 'blue')
+names(cols) <- data.sets
+v <- prep.signals(data.sets, dir=dir$data, verbose=1)
 if (length(v$err) > 0) {
   for (x in v$err) cat(x, '\n')
   stop()
 } else {
-  signals <- v$data
+  signal <- v$data
 }
 
 ```
 ```{r}
-plt.signals(signals)
+plt.signals(signal)
 ```
 
 \section{Signal amplitude analysis}
 
 ```{r}
-plt.cdfs(signals, xlab='amplitude', value='norm', titl='signals')
+plt.cdfs(signal, xlab='amplitude', value='norm', titl='signals')
+qSig <- list() # list of signal quantiles
+qSig$dry <- quantile(signal$dry$norm, probs)
+qSig$wash <- quantile(signal$wash$norm, probs)
 ```
 
 \section{Frequency analysis}
 ```{r}
+source(fn.libs)
 power <- list()
-for (name in names(signals)) {
-  y <- signals[[name]]$norm; t <- signals[[name]]$t
-  v <- get.fft(y, t, mean.rm=TRUE)
+for (name in names(signal)) {
+  y <- signal[[name]]$norm; t <- signal[[name]]$t
+  v <- get.fft(y, t, tag=name)
   plt.power(y, t, v$pw, v$f, tag=name)
   power[[name]] <- list(f=v$f, pw=v$pw)
 }
-plt.cdfs(power, xlab='freq', value='pw', titl='power')
+```
+```{r}
+qPow <- list() # power quantiles
+plot(1, xlim=c(0,50), ylim=c(0,1), type='n', xlab='freq', ylab='Cummulative power')
+for (x in names(power)) {
+   f <- power[[x]]$f; p <- power[[x]]$pw
+   v <- cumsum(p)
+   v <- v/max(v)
+   qf <- splinefun(v, f)
+   qPow[[x]] <- qf(probs)
+   lines(f, v, type='l', col=cols[x])
+}
+legend('topleft', legend=names(power), col=cols, lwd=2)
+```
+\section{Quantiles for commulative power spectrum}
+```{r}
+cat('signal quantiles:\n')
+print (qSig)
+cat('power quantiles:\n')
+print (qPow)
 ```
