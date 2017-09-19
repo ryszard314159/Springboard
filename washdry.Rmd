@@ -1,9 +1,11 @@
 ---
-title: "FFT Sandbox"
+title: "WashDry"
 author: "Ryszard Czerminski"
-date: "September 2, 2017"
+date: "2017-09-19"
 header-includes:
    - \usepackage{amsmath}
+   - \usepackage{color}
+   - \usepackage{xcolor}
    - \usepackage{mathtools}
    - \DeclareMathOperator*{\E}{\mathbb{E}}
    - \usepackage{hyperref}
@@ -20,7 +22,7 @@ output:
 
 \section{Intro}
 
-\section{Setup global contants for vibration analysis}
+\section{Setup global contants for data and libs}
 ```{r}
 cat('cwd:', getwd(), '\n')
 dir <- list()
@@ -47,11 +49,59 @@ x$Span <- x$End - x$Start
 ```
 Note, that \texttt{Duration} (from csv) and \texttt{Span} (calculated as diff beteen \texttt{Start}
 and \texttt{End} are not the same:
+
 ```{r}
 head(x[, c('Duration', 'Span')])
 head(x)
 ```
 
+I am removing \texttt{Duration} column and will use \texttt{Span} column for know.
+`r x$Duration <- NULL`
+\textbf{You should find out what is the reason for this discrepancy.}
+```{r}
+head(x)
+```
+\subsection{Are there any spans of length 0?}
+```{r}
+w <- which(x$Span == 0)
+x[w, c('State', 'Reason', 'Span')]
+```
+Apparently there are. Let's remove them since these do not seem
+to be very meaningful. I will remove old row numbering as well.
+```{r}
+x <- x[-w,]
+row.names(x) <- NULL
+```
+
+\subsection{Check for gaps}
+```{r}
+i <- 1:(nrow(x)-1); j <- i + 1
+d <- x$Start[j] - x$End[i]
+w <- which(d > 0)
+```
+There is a `r d[w]` `r units(d[w])` gap in data around row `r w`.
+Code needs to be able to deal with time gaps like this.
+
+\subsection{How many different states we have?}
+
+```{r}
+tb <- table(x$State)
+tb
+```
+Let's recode them as follows
+```{r}
+codes <- c(Running=0, Standby=1, Setup=2, Down=3)
+```
+Now we can convert the data frame. Let's just select a fixed slice of a df
+e.g.8h beetween 8am and 4pm)
+```{r}
+slice <- list()
+slice$start <- as.POSIXct('2017-08-11 08:00:00', format='%Y-%m-%d %H:%M:%S')
+slice$end <- as.POSIXct('2017-08-11 16:00:00', format='%Y-%m-%d %H:%M:%S')
+```
+
+
+\subsection{Read vib data}
 ```{r}
 source(fn.libs)
 data.sets <- c('dry', 'wash')
